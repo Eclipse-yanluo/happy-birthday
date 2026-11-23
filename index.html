@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>王筱雯 · 生辰喜乐</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #06060b;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    user-select: none; touch-action: none;
+  }
+  canvas#stage {
+    position: fixed; inset: 0; width: 100%; height: 100%; display: block;
+    cursor: grab;
+  }
+  canvas#stage:active { cursor: grabbing; }
+
+  /* 顶部极简悬浮工具条 */
+  .top-bar {
+    position: fixed; top: max(14px, env(safe-area-inset-top)); right: 14px;
+    z-index: 20; display: flex; gap: 8px;
+  }
+  .pill {
+    height: 34px; padding: 0 13px; border-radius: 99px;
+    background: rgba(16, 16, 28, 0.58);
+    border: 1px solid rgba(255, 224, 155, 0.3);
+    color: #ffe9be; font-size: 12.5px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    transition: transform .15s ease, border-color .2s ease;
+  }
+  .pill:active { transform: scale(.93); }
+  .spin { display: inline-block; animation: spin 4.5s linear infinite; }
+  .paused .spin { animation-play-state: paused; opacity: .5; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 底部氛围标题 + 交互按钮 */
+  .bottom-ui {
+    position: fixed; left: 0; right: 0;
+    bottom: max(22px, env(safe-area-inset-bottom));
+    z-index: 15; display: flex; flex-direction: column; align-items: center;
+    padding: 0 20px; pointer-events: none;
+  }
+  .wish-headline {
+    font-size: 25px; font-weight: 700; letter-spacing: 3px;
+    background: linear-gradient(90deg, #fff5d6 0%, #ffd97d 38%, #8be9fd 72%, #ffb3d9 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 0 24px rgba(255, 217, 125, 0.25);
+    margin-bottom: 6px; text-align: center;
+  }
+  .wish-sub {
+    font-size: 13px; letter-spacing: 1.4px; color: rgba(255, 240, 220, 0.72);
+    margin-bottom: 16px; text-align: center;
+  }
+  .btn-row {
+    display: flex; gap: 10px; pointer-events: auto;
+  }
+  .cta-btn {
+    padding: 11px 22px; border-radius: 99px; border: none; cursor: pointer;
+    font-size: 14px; font-weight: 700; color: #190d24;
+    background: linear-gradient(90deg, #ffe28a 0%, #ffb5d5 55%, #8be9fd 100%);
+    box-shadow: 0 8px 26px rgba(255, 200, 120, 0.3);
+    transition: transform .15s ease, opacity .2s ease;
+  }
+  .cta-btn:active { transform: scale(.94); }
+  .cta-ghost {
+    padding: 11px 18px; border-radius: 99px; cursor: pointer;
+    font-size: 13.5px; font-weight: 600; color: #ffe8bd;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 224, 155, 0.35);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    transition: transform .15s ease;
+  }
+  .cta-ghost:active { transform: scale(.94); }
+  .drag-hint {
+    margin-top: 10px; font-size: 11.5px; color: rgba(255, 255, 255, 0.38);
+    letter-spacing: 1px;
+  }
+
+  /* 专属信件弹窗 */
+  .modal-mask {
+    position: fixed; inset: 0; z-index: 40;
+    background: rgba(4, 4, 12, 0.68);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; opacity: 0; pointer-events: none;
+    transition: opacity .35s ease;
+  }
+  .modal-mask.show { opacity: 1; pointer-events: auto; }
+  .letter-card {
+    width: 100%; max-width: 390px; max-height: 80vh; overflow-y: auto;
+    background: linear-gradient(160deg, rgba(28, 22, 48, 0.92), rgba(12, 12, 24, 0.94));
+    border: 1px solid rgba(255, 217, 125, 0.38); border-radius: 24px;
+    padding: 24px 22px 22px;
+    box-shadow: 0 24px 70px rgba(0,0,0,.7), 0 0 40px rgba(114, 239, 221, 0.12);
+    transform: translateY(16px) scale(.96); transition: transform .35s cubic-bezier(.2,1.2,.3,1);
+    touch-action: pan-y;
+  }
+  .modal-mask.show .letter-card { transform: none; }
+  .letter-tag {
+    text-align: center; font-size: 11px; letter-spacing: 2.2px;
+    color: #8be9fd; margin-bottom: 8px;
+  }
+  .letter-title {
+    text-align: center; font-size: 20px; font-weight: 800; color: #ffd97d;
+    margin-bottom: 14px;
+  }
+  .letter-body {
+    font-size: 14.5px; line-height: 1.9; color: rgba(255, 245, 234, 0.92);
+  }
+  .letter-body p { margin-bottom: 10px; }
+  .letter-sign {
+    text-align: right; color: #ffb3d9; font-size: 13.5px; font-weight: 600;
+    margin-top: 12px;
+  }
+  .gallery {
+    display: none; margin-top: 14px; grid-template-columns: repeat(2, 1fr); gap: 8px;
+  }
+  .gallery.show { display: grid; }
+  .photo-item {
+    background: rgba(255,255,255,.07); padding: 5px 5px 8px; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.14);
+  }
+  .photo-item img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: 7px; display: block; }
+  .photo-cap { font-size: 11px; color: rgba(255,240,220,.78); text-align: center; margin-top: 5px; }
+  .close-btn {
+    margin-top: 16px; width: 100%; padding: 11px; border-radius: 12px;
+    border: 1px solid rgba(255, 217, 125, 0.35);
+    background: rgba(255, 255, 255, 0.08); color: #ffe9be;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="stage"></canvas>
+
+<div class="top-bar">
+  <button class="pill paused" id="btnMusic" onclick="toggleMusic()">
+    <span class="spin">🎵</span><span id="musicLbl">音乐</span>
+  </button>
+  <button class="pill" onclick="openLetter()">💌 来信</button>
+</div>
+
+<div class="bottom-ui">
+  <div class="wish-headline" id="headlineTxt"></div>
+  <div class="wish-sub" id="subTxt"></div>
+  <div class="btn-row">
+    <button class="cta-btn" id="btnCandle" onclick="toggleCandle()">🕯️ 吹灭蜡烛 · 许个愿</button>
+    <button class="cta-ghost" onclick="boomFireworks()">✨ 放烟花</button>
+  </div>
+  <div class="drag-hint">左右滑动可 360° 旋转立体星空蛋糕</div>
+</div>
+
+<!-- 祝福信弹窗 -->
+<div class="modal-mask" id="letterMask" onclick="if(event.target===this)closeLetter()">
+  <div class="letter-card">
+    <div class="letter-tag">HAPPY BIRTHDAY · 专属来信</div>
+    <div class="letter-title" id="letterTitle"></div>
+    <div class="letter-body" id="letterBody"></div>
+    <div class="letter-sign" id="letterSign"></div>
+    <div class="gallery" id="gallery"></div>
+    <button class="close-btn" onclick="closeLetter()">收好信件 · 继续看星空蛋糕</button>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+ *  ✨ 专属可编辑配置区（以后想改名字、祝福语或加照片，改这里就行！）✨
+ * ===================================================================== */
+const CONFIG = {
+  name: "王筱雯",
+  headline: "王筱雯 · 生辰喜乐",
+  subtitle: "敲一行代码，把整颗星辰蛋糕送给你 ✨",
+  cakeLabelTop: "happy birthday",
+  cakeLabelSub: "to 王筱雯",
+
+  letterTitle: "致 王筱雯",
+  letterParagraphs: [
+    "生日快乐！恭喜你解锁了藏在旅行天气时钟里的第二个隐藏彩蛋。",
+    "愿你新的一岁眼里有星光，心中有热爱，所遇皆温柔，所行皆坦途，每天都有好天气和好心情。",
+    "岁岁常欢愉，万事皆胜意，永远做闪闪发光的自己！"
+  ],
+  letterSign: "—— 来自你的好朋友 wyatt",
+
+  // 可选照片墙：填入图片链接后自动在信件下方展示，留空 [] 则隐藏
+  // 示例：{ url: "https://你的图片链接.jpg", caption: "珍贵回忆" }
+  photos: []
+};
+
+/* ================= 渲染文本配置 ================= */
+document.getElementById("headlineTxt").textContent = CONFIG.headline;
+document.getElementById("subTxt").textContent = CONFIG.subtitle;
+document.getElementById("letterTitle").textContent = CONFIG.letterTitle;
+document.getElementById("letterSign").textContent = CONFIG.letterSign;
+document.getElementById("letterBody").innerHTML = CONFIG.letterParagraphs.map(p => `<p>${p}</p>`).join("");
+if (CONFIG.photos && CONFIG.photos.length) {
+  const g = document.getElementById("gallery");
+  g.innerHTML = CONFIG.photos.map(ph =>
+    `<div class="photo-item"><img src="${ph.url}" alt=""><div class="photo-cap">${ph.caption || ""}</div></div>`
+  ).join("");
+  g.classList.add("show");
+}
+
+/* ================= Web Audio 轻柔八音盒《生日快乐歌》 ================= */
+let audioCtx = null, musicOn = false, musicTimer = null;
+const MELODY = [
+  [392,.34],[392,.16],[440,.48],[392,.48],[523.25,.48],[493.88,.92],
+  [392,.34],[392,.16],[440,.48],[392,.48],[587.33,.48],[523.25,.92],
+  [392,.34],[392,.16],[783.99,.48],[659.25,.48],[523.25,.48],[493.88,.48],[440,.85],
+  [698.46,.34],[698.46,.16],[659.25,.48],[523.25,.48],[587.33,.48],[523.25,1.08]
+];
+function loopMusic() {
+  if (!musicOn) return;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!audioCtx) audioCtx = new AC();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    let t = audioCtx.currentTime + 0.05;
+    for (const [f, d] of MELODY) {
+      const o1 = audioCtx.createOscillator(), o2 = audioCtx.createOscillator();
+      const g = audioCtx.createGain(), g2 = audioCtx.createGain();
+      o1.type = "triangle"; o1.frequency.value = f;
+      o2.type = "sine"; o2.frequency.value = f * 2;
+      g.gain.setValueAtTime(0.001, t);
+      g.gain.linearRampToValueAtTime(0.13, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + d * 0.95);
+      g2.gain.value = 0.025;
+      o1.connect(g); o2.connect(g2); g2.connect(g); g.connect(audioCtx.destination);
+      o1.start(t); o1.stop(t + d); o2.start(t); o2.stop(t + d);
+      t += d;
+    }
+    const ms = MELODY.reduce((s, n) => s + n[1], 0) * 1000 + 800;
+    musicTimer = setTimeout(loopMusic, ms);
+  } catch (e) {}
+}
+function setMusic(on) {
+  musicOn = on;
+  if (musicTimer) { clearTimeout(musicTimer); musicTimer = null; }
+  const btn = document.getElementById("btnMusic");
+  const lbl = document.getElementById("musicLbl");
+  if (on) { btn.classList.remove("paused"); lbl.textContent = "播放中"; loopMusic(); }
+  else { btn.classList.add("paused"); lbl.textContent = "音乐"; }
+}
+function toggleMusic() { setMusic(!musicOn); }
+
+/* ================= 3D 水晶球星辰蛋糕引擎 ================= */
+const cv = document.getElementById("stage");
+const ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1, SCALE = 1;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  SCALE = Math.min(W / 325, H / 560, 1.72);
+}
+window.addEventListener("resize", resize);
+resize();
+
+/* 3D 相机旋转与拖拽 */
+let rotY = 0.35, rotX = 0.23;
+let targetRotX = 0.23, velY = 0.0045;
+let dragging = false, lastX = 0, lastY = 0;
+
+cv.addEventListener("pointerdown", e => {
+  dragging = true; lastX = e.clientX; lastY = e.clientY;
+});
+window.addEventListener("pointermove", e => {
+  if (!dragging) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  rotY += dx * 0.0085;
+  velY = dx * 0.004;
+  targetRotX = Math.max(-0.08, Math.min(0.55, targetRotX + dy * 0.005));
+});
+window.addEventListener("pointerup", () => { dragging = false; });
+
+/* 配色（严格还原梦幻星辰水晶球蛋糕色调） */
+const PALETTE = [
+  "#ffe853", // 亮星黄
+  "#ffd166", // 暖金
+  "#2ec4ff", // 霓虹电光蓝
+  "#5ce1e6", // 冰青蓝
+  "#ff6b9d", // 樱花粉
+  "#ff4d6d", // 珊瑚红
+  "#ffffff", // 纯星白
+  "#c77dff", // 星云紫
+  "#ff9f1c"  // 琥珀橙
+];
+
+/* 3D 几何参数（更大、更高、更具冲击力的立体水晶球蛋糕比例） */
+const CAKE_R = 104;
+const CAKE_TOP = -54;
+const CAKE_BOT = 68;
+const PLATE_Y = 72;
+const PLATE_R = 148;
+const DOME_CY = -26;
+const DOME_R = 172;
+const CANDLE_TOP = -148;
+
+/* 粒子生成 */
+const bgStars = [];
+for (let i = 0; i < 85; i++) {
+  bgStars.push({
+    nx: Math.random(), ny: Math.random(),
+    r: Math.random() * 1.9 + 0.5,
+    a: Math.random(), da: (Math.random() * 0.014 + 0.004) * (Math.random() < .5 ? 1 : -1),
+    col: Math.random() < .25 ? "#ffe853" : "#ffffff"
+  });
+}
+
+const particles = [];
+function randCol() { return PALETTE[Math.floor(Math.random() * PALETTE.length)]; }
+
+/* 1) 蛋糕顶面立体彩糖与星光粒子（密集、绚丽、靠近蜡烛偏暖金） */
+for (let i = 0; i < 210; i++) {
+  const a = Math.random() * Math.PI * 2;
+  const rad = Math.sqrt(Math.random()) * (CAKE_R + 5);
+  const edgeBoost = rad > CAKE_R * 0.72 ? (Math.random() - 0.5) * 14 : 0;
+  const y = CAKE_TOP - 2 - Math.random() * 10 + edgeBoost * 0.4;
+  const nearCandle = rad < 38;
+  particles.push({
+    kind: Math.random() < 0.36 ? "star" : "dot",
+    layer: "top",
+    x: Math.cos(a) * rad, y, z: Math.sin(a) * rad,
+    size: Math.random() * 4.2 + 1.8,
+    col: nearCandle ? (Math.random() < 0.7 ? "#ffe853" : "#fff7cc") : randCol(),
+    phase: Math.random() * Math.PI * 2,
+    spin: (Math.random() - 0.5) * 0.03,
+    glow: Math.random() < 0.35
+  });
+}
+
+/* 2) 蛋糕侧面银河点缀星星与彩片（随蛋糕主体旋转） */
+for (let i = 0; i < 145; i++) {
+  const a = Math.random() * Math.PI * 2;
+  const y = CAKE_TOP + 5 + Math.random() * (CAKE_BOT - CAKE_TOP - 8);
+  const rad = CAKE_R + 1.5;
+  particles.push({
+    kind: Math.random() < 0.45 ? "star" : "dot",
+    layer: "body",
+    x: Math.cos(a) * rad, y, z: Math.sin(a) * rad,
+    size: Math.random() * 4.8 + 1.5,
+    col: randCol(),
+    phase: Math.random() * Math.PI * 2,
+    spin: (Math.random() - 0.5) * 0.02,
+    glow: Math.random() < 0.3
+  });
+}
+
+/* 3) 玻璃水晶球内部悬浮旋转的 3D 星空粒子与五角星 */
+for (let i = 0; i < 230; i++) {
+  const u = Math.random() * 2 - 1;
+  const theta = Math.random() * Math.PI * 2;
+  const rShell = Math.cbrt(Math.random()) * (DOME_R - 8);
+  const s = Math.sqrt(1 - u * u);
+  let x = rShell * s * Math.cos(theta);
+  let y = DOME_CY + rShell * u;
+  let z = rShell * s * Math.sin(theta);
+  if (y > PLATE_Y - 6) y = DOME_CY - Math.abs(rShell * u) * 0.85;
+  // 避开蛋糕内部中心
+  const horiz = Math.hypot(x, z);
+  if (y > CAKE_TOP - 8 && horiz < CAKE_R + 8) {
+    const push = (CAKE_R + 14) / Math.max(horiz, 1);
+    x *= push; z *= push;
+  }
+  particles.push({
+    kind: Math.random() < 0.32 ? "star" : (Math.random() < 0.14 ? "bokeh" : "dot"),
+    layer: "dome",
+    x, y, z,
+    size: Math.random() * 5.2 + 1.4,
+    col: randCol(),
+    phase: Math.random() * Math.PI * 2,
+    floatAmp: Math.random() * 4 + 1.5,
+    floatSpd: Math.random() * 0.015 + 0.008,
+    orbitSpd: (Math.random() - 0.5) * 0.003,
+    glow: Math.random() < 0.45
+  });
+}
+
+/* 4) 瓷盘边缘散落彩糖与小星 */
+for (let i = 0; i < 42; i++) {
+  const a = Math.random() * Math.PI * 2;
+  const rad = CAKE_R + 10 + Math.random() * (PLATE_R - CAKE_R - 18);
+  particles.push({
+    kind: Math.random() < 0.38 ? "star" : "dot",
+    layer: "plate",
+    x: Math.cos(a) * rad, y: PLATE_Y - 1, z: Math.sin(a) * rad,
+    size: Math.random() * 3.6 + 1.4,
+    col: randCol(),
+    phase: Math.random() * Math.PI * 2,
+    glow: Math.random() < 0.25
+  });
+}
+
+/* 烟花与蜡烛烟雾粒子 */
+const fireworks = [];
+const smokes = [];
+const embers = [];
+let candleLit = true;
+let flameScale = 1;
+
+function spawnFirework3D(cx = 0, cy = -70, cz = 0, count = 65) {
+  for (let i = 0; i < count; i++) {
+    const u = Math.random() * 2 - 1;
+    const th = Math.random() * Math.PI * 2;
+    const s = Math.sqrt(1 - u * u);
+    const spd = Math.random() * 4.8 + 1.6;
+    fireworks.push({
+      x: cx, y: cy, z: cz,
+      vx: s * Math.cos(th) * spd,
+      vy: u * spd - 1.2,
+      vz: s * Math.sin(th) * spd,
+      life: 1, decay: 0.011 + Math.random() * 0.01,
+      size: Math.random() * 3.8 + 1.8,
+      kind: i % 3 === 0 ? "star" : "dot",
+      col: randCol()
+    });
+  }
+}
+
+function boomFireworks() {
+  if (!musicOn) setMusic(true);
+  for (let k = 0; k < 4; k++) {
+    setTimeout(() => {
+      spawnFirework3D(
+        (Math.random() - 0.5) * 160,
+        -120 + (Math.random() - 0.5) * 70,
+        (Math.random() - 0.5) * 100,
+        55
+      );
+    }, k * 240);
+  }
+}
+
+function toggleCandle() {
+  if (!musicOn) setMusic(true);
+  const btn = document.getElementById("btnCandle");
+  if (candleLit) {
+    candleLit = false;
+    btn.textContent = "🔥 重新点亮蜡烛";
+    for (let i = 0; i < 16; i++) {
+      smokes.push({
+        x: (Math.random() - 0.5) * 6, y: CANDLE_TOP - 6, z: (Math.random() - 0.5) * 6,
+        vx: (Math.random() - 0.5) * 0.35 + 0.15, vy: -(Math.random() * 0.8 + 0.55),
+        r: Math.random() * 5 + 4, life: 1
+      });
+    }
+    boomFireworks();
+    setTimeout(openLetter, 1100);
+  } else {
+    candleLit = true;
+    btn.textContent = "🕯️ 吹灭蜡烛 · 许个愿";
+    spawnFirework3D(0, CANDLE_TOP - 15, 0, 35);
+  }
+}
+
+function openLetter() { document.getElementById("letterMask").classList.add("show"); }
+function closeLetter() { document.getElementById("letterMask").classList.remove("show"); }
+
+/* 3D 透视投影 */
+const FOV = 560;
+function project(x, y, z) {
+  const cy = Math.cos(rotY), sy = Math.sin(rotY);
+  const rx = x * cy - z * sy;
+  const rz1 = x * sy + z * cy;
+  const cx = Math.cos(rotX), sx = Math.sin(rotX);
+  const ry = y * cx - rz1 * sx;
+  const rz = y * sx + rz1 * cx;
+  const s = (FOV / (FOV + rz)) * SCALE;
+  return {
+    sx: W * 0.5 + rx * s,
+    sy: H * 0.44 + ry * s,
+    z: rz,
+    s
+  };
+}
+
+/* 绘制发光五角星 */
+function drawStar(x, y, r, rot, col, alpha, glow) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.globalAlpha = alpha;
+  if (glow) {
+    ctx.shadowColor = col;
+    ctx.shadowBlur = r * 2.4;
+  }
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const a1 = (i * 72 - 90) * Math.PI / 180;
+    const a2 = ((i * 72 + 36) - 90) * Math.PI / 180;
+    if (i === 0) ctx.moveTo(Math.cos(a1) * r, Math.sin(a1) * r);
+    else ctx.lineTo(Math.cos(a1) * r, Math.sin(a1) * r);
+    ctx.lineTo(Math.cos(a2) * r * 0.45, Math.sin(a2) * r * 0.45);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBokeh(x, y, r, col, alpha) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r * 2.6);
+  g.addColorStop(0, "#ffffff");
+  g.addColorStop(0.32, col);
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 2.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/* 绘制 3D 白色光感瓷盘 */
+function drawPlate() {
+  const c = project(0, PLATE_Y, 0);
+  const rx = PLATE_R * c.s;
+  const ry = Math.max(10, PLATE_R * Math.sin(Math.max(0.12, rotX + 0.14)) * c.s);
+
+  // 底部蓝色微光投影
+  ctx.save();
+  const sh = ctx.createRadialGradient(c.sx, c.sy + ry * 0.25, rx * 0.1, c.sx, c.sy + ry * 0.25, rx * 1.15);
+  sh.addColorStop(0, "rgba(70, 150, 255, 0.35)");
+  sh.addColorStop(0.65, "rgba(40, 100, 220, 0.12)");
+  sh.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = sh;
+  ctx.beginPath(); ctx.ellipse(c.sx, c.sy + ry * 0.28, rx * 1.15, ry * 1.25, 0, 0, Math.PI * 2); ctx.fill();
+
+  // 盘子厚度边缘
+  const rimGrad = ctx.createLinearGradient(c.sx - rx, c.sy, c.sx + rx, c.sy);
+  rimGrad.addColorStop(0, "#7ab8ff");
+  rimGrad.addColorStop(0.25, "#c5d8f8");
+  rimGrad.addColorStop(0.5, "#8aa8e8");
+  rimGrad.addColorStop(0.8, "#d4e2ff");
+  rimGrad.addColorStop(1, "#6ba4ff");
+  ctx.fillStyle = rimGrad;
+  ctx.beginPath(); ctx.ellipse(c.sx, c.sy + 6 * c.s, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+
+  // 盘面高光陶瓷质感
+  const topGrad = ctx.createRadialGradient(c.sx - rx * 0.18, c.sy - ry * 0.2, rx * 0.08, c.sx, c.sy, rx);
+  topGrad.addColorStop(0, "#ffffff");
+  topGrad.addColorStop(0.58, "#e6eeff");
+  topGrad.addColorStop(0.88, "#b7c9f0");
+  topGrad.addColorStop(1, "#e8f2ff");
+  ctx.fillStyle = topGrad;
+  ctx.beginPath(); ctx.ellipse(c.sx, c.sy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+
+  // 盘子内圈阴影
+  ctx.strokeStyle = "rgba(60, 90, 160, 0.22)";
+  ctx.lineWidth = 1.5 * c.s;
+  ctx.beginPath(); ctx.ellipse(c.sx, c.sy, rx * 0.78, ry * 0.78, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+/* 绘制 3D 暗夜星河圆柱蛋糕主体 */
+function drawCakeBody(t) {
+  const topC = project(0, CAKE_TOP, 0);
+  const botC = project(0, CAKE_BOT, 0);
+  const rx = CAKE_R * ((topC.s + botC.s) * 0.5);
+  const ry = Math.max(8, CAKE_R * Math.sin(Math.max(0.12, rotX + 0.14)) * topC.s);
+
+  ctx.save();
+  // 圆柱主体轮廓
+  ctx.beginPath();
+  ctx.ellipse(topC.sx, topC.sy, rx, ry, 0, Math.PI, Math.PI * 2);
+  ctx.lineTo(botC.sx + rx, botC.sy);
+  ctx.ellipse(botC.sx, botC.sy, rx, ry, 0, 0, Math.PI);
+  ctx.closePath();
+
+  // 深邃黑蓝星河渐变 + 左右炫彩反光（还原截图质感）
+  const bodyGrad = ctx.createLinearGradient(botC.sx - rx, botC.sy, botC.sx + rx, botC.sy);
+  bodyGrad.addColorStop(0.0, "#1d7bff");
+  bodyGrad.addColorStop(0.08, "#102850");
+  bodyGrad.addColorStop(0.24, "#0a0c18");
+  bodyGrad.addColorStop(0.55, "#070811");
+  bodyGrad.addColorStop(0.82, "#121830");
+  bodyGrad.addColorStop(0.94, "#2979ff");
+  bodyGrad.addColorStop(1.0, "#64c8ff");
+  ctx.fillStyle = bodyGrad;
+  ctx.fill();
+
+  // 蛋糕底部蓝色星云雾光
+  const botGlow = ctx.createLinearGradient(0, botC.sy - 26 * botC.s, 0, botC.sy + ry);
+  botGlow.addColorStop(0, "rgba(0,0,0,0)");
+  botGlow.addColorStop(0.7, "rgba(46, 160, 255, 0.25)");
+  botGlow.addColorStop(1, "rgba(110, 210, 255, 0.42)");
+  ctx.fillStyle = botGlow;
+  ctx.fill();
+
+  // 蛋糕顶面
+  const topGrad = ctx.createRadialGradient(topC.sx, topC.sy, 4, topC.sx, topC.sy, rx);
+  if (candleLit) {
+    topGrad.addColorStop(0, "rgba(255, 224, 130, 0.85)");
+    topGrad.addColorStop(0.38, "rgba(190, 130, 90, 0.45)");
+    topGrad.addColorStop(0.78, "rgba(40, 48, 86, 0.92)");
+    topGrad.addColorStop(1, "rgba(120, 180, 255, 0.65)");
+  } else {
+    topGrad.addColorStop(0, "rgba(70, 80, 120, 0.8)");
+    topGrad.addColorStop(1, "rgba(25, 32, 60, 0.92)");
+  }
+  ctx.beginPath();
+  ctx.ellipse(topC.sx, topC.sy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fillStyle = topGrad;
+  ctx.fill();
+
+  // 蛋糕正面贴合的微光字样（随旋转自然淡入淡出）
+  const frontZ = Math.cos(rotY);
+  if (frontZ > -0.15) {
+    const labelAlpha = Math.max(0, Math.min(0.92, (frontZ + 0.15) * 1.1));
+    ctx.globalAlpha = labelAlpha;
+    ctx.fillStyle = "#fff5dc";
+    ctx.shadowColor = "rgba(255, 217, 125, 0.7)";
+    ctx.shadowBlur = 8;
+    ctx.font = `500 ${Math.round(14.5 * topC.s)}px Georgia, "PingFang SC", serif`;
+    ctx.textAlign = "center";
+    ctx.fillText(CONFIG.cakeLabelTop, topC.sx + Math.sin(rotY * -1) * rx * 0.25, topC.sy + 70 * topC.s);
+    ctx.fillStyle = "#ffd97d";
+    ctx.font = `600 ${Math.round(12.5 * topC.s)}px "PingFang SC", sans-serif`;
+    ctx.fillText(CONFIG.cakeLabelSub, topC.sx + Math.sin(rotY * -1) * rx * 0.25, topC.sy + 88 * topC.s);
+  }
+  ctx.restore();
+}
+
+/* 绘制中心金色蜡烛与立体跳动火焰 */
+function drawCandle(t) {
+  const base = project(0, CAKE_TOP - 2, 0);
+  const top = project(0, CANDLE_TOP, 0);
+  const w = 8.5 * top.s;
+
+  ctx.save();
+  // 蜡烛柱体
+  const cg = ctx.createLinearGradient(top.sx - w * 0.5, 0, top.sx + w * 0.5, 0);
+  cg.addColorStop(0, "#d49b35");
+  cg.addColorStop(0.4, "#fff2b2");
+  cg.addColorStop(0.75, "#f5be4f");
+  cg.addColorStop(1, "#a66c1a");
+  ctx.fillStyle = cg;
+  ctx.beginPath();
+  ctx.roundRect(top.sx - w * 0.5, top.sy, w, base.sy - top.sy, w * 0.35);
+  ctx.fill();
+
+  // 烛芯
+  ctx.strokeStyle = "#2b1b12";
+  ctx.lineWidth = Math.max(1.5, 1.8 * top.s);
+  ctx.beginPath();
+  ctx.moveTo(top.sx, top.sy);
+  ctx.lineTo(top.sx, top.sy - 6 * top.s);
+  ctx.stroke();
+
+  // 火焰平滑开关缩放
+  flameScale += ((candleLit ? 1 : 0) - flameScale) * 0.14;
+  if (flameScale > 0.03) {
+    const sway = Math.sin(t * 0.0085) * 2.4 + Math.cos(t * 0.015) * 1.2;
+    const stretch = 1 + Math.sin(t * 0.012) * 0.07;
+    const fx = top.sx;
+    const fy = top.sy - 6 * top.s;
+    const fs = top.s * flameScale;
+
+    // 温暖外圈光晕（照亮水晶球）
+    const aura = ctx.createRadialGradient(fx, fy - 24 * fs, 2, fx, fy - 20 * fs, 76 * fs);
+    aura.addColorStop(0, "rgba(255, 240, 170, 0.72)");
+    aura.addColorStop(0.32, "rgba(255, 168, 52, 0.34)");
+    aura.addColorStop(0.68, "rgba(255, 110, 30, 0.10)");
+    aura.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = aura;
+    ctx.beginPath(); ctx.arc(fx, fy - 20 * fs, 76 * fs, 0, Math.PI * 2); ctx.fill();
+
+    // 火焰外层（琥珀橙）
+    ctx.beginPath();
+    ctx.moveTo(fx, fy);
+    ctx.bezierCurveTo(fx - 14 * fs, fy - 10 * fs, fx - 11 * fs, fy - 34 * fs, fx + sway * fs, fy - 52 * fs * stretch);
+    ctx.bezierCurveTo(fx + 11 * fs, fy - 34 * fs, fx + 14 * fs, fy - 10 * fs, fx, fy);
+    const fg = ctx.createLinearGradient(fx, fy, fx, fy - 52 * fs);
+    fg.addColorStop(0, "#8fd3ff");
+    fg.addColorStop(0.18, "#ff9900");
+    fg.addColorStop(0.65, "#ffe066");
+    fg.addColorStop(1, "rgba(255,255,255,0.95)");
+    ctx.fillStyle = fg;
+    ctx.fill();
+
+    // 火焰白炽核心
+    ctx.beginPath();
+    ctx.moveTo(fx, fy - 3 * fs);
+    ctx.bezierCurveTo(fx - 7 * fs, fy - 11 * fs, fx - 5 * fs, fy - 26 * fs, fx + sway * 0.5 * fs, fy - 36 * fs * stretch);
+    ctx.bezierCurveTo(fx + 5 * fs, fy - 26 * fs, fx + 7 * fs, fy - 11 * fs, fx, fy - 3 * fs);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+
+    // 偶尔飘出细小火星
+    if (Math.random() < 0.25) {
+      embers.push({
+        x: (Math.random() - 0.5) * 8, y: CANDLE_TOP - 32, z: (Math.random() - 0.5) * 8,
+        vx: (Math.random() - 0.5) * 0.4, vy: -(Math.random() * 0.9 + 0.5),
+        life: 1, r: Math.random() * 1.8 + 0.7
+      });
+    }
+  }
+  ctx.restore();
+}
+
+/* 绘制水晶球玻璃罩壳（双层高光弧线） */
+function drawCrystalDome(isFront) {
+  const c = project(0, DOME_CY, 0);
+  const r = DOME_R * c.s;
+  ctx.save();
+  if (!isFront) {
+    // 背面微弱星云雾感
+    const bg = ctx.createRadialGradient(c.sx, c.sy - r * 0.2, r * 0.1, c.sx, c.sy, r);
+    bg.addColorStop(0, "rgba(255, 200, 120, 0.05)");
+    bg.addColorStop(0.75, "rgba(70, 130, 255, 0.04)");
+    bg.addColorStop(1, "rgba(255, 255, 255, 0.08)");
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    ctx.arc(c.sx, c.sy, r, Math.PI * 0.86, Math.PI * 2.14);
+    ctx.fill();
+  } else {
+    // 顶部暖金玻璃反光弧
+    const topArc = ctx.createLinearGradient(c.sx - r, c.sy - r, c.sx + r, c.sy);
+    topArc.addColorStop(0, "rgba(180, 220, 255, 0.22)");
+    topArc.addColorStop(0.5, candleLit ? "rgba(255, 215, 145, 0.65)" : "rgba(180, 215, 255, 0.35)");
+    topArc.addColorStop(1, "rgba(150, 200, 255, 0.18)");
+    ctx.strokeStyle = topArc;
+    ctx.lineWidth = 1.9 * c.s;
+    ctx.beginPath();
+    ctx.arc(c.sx, c.sy, r, Math.PI * 0.88, Math.PI * 2.12);
+    ctx.stroke();
+
+    // 左侧与右侧精致内层玻璃高光
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.34)";
+    ctx.lineWidth = 1.4 * c.s;
+    ctx.beginPath();
+    ctx.arc(c.sx, c.sy, r * 0.94, Math.PI * 0.96, Math.PI * 1.28);
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(160, 215, 255, 0.25)";
+    ctx.lineWidth = 1.2 * c.s;
+    ctx.beginPath();
+    ctx.arc(c.sx, c.sy, r * 0.95, Math.PI * 1.72, Math.PI * 2.02);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* 主渲染循环 */
+function render(t) {
+  ctx.fillStyle = "#06060b";
+  ctx.fillRect(0, 0, W, H);
+
+  // 相机丝滑自转与惯性
+  if (!dragging) {
+    velY += (0.0042 - velY) * 0.04;
+    rotY += velY;
+  }
+  rotX += (targetRotX - rotX) * 0.08;
+
+  // 1. 远处星空背景
+  for (const s of bgStars) {
+    s.a += s.da;
+    if (s.a > 0.95 || s.a < 0.15) s.da *= -1;
+    ctx.globalAlpha = s.a;
+    ctx.fillStyle = s.col;
+    ctx.beginPath();
+    ctx.arc(s.nx * W, s.ny * H, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // 2. 水晶球背面
+  drawCrystalDome(false);
+
+  // 3. 收集并按 Z 深度排序全部 3D 粒子
+  const backList = [], frontList = [];
+  for (const p of particles) {
+    let x = p.x, y = p.y, z = p.z;
+    if (p.layer === "dome") {
+      const ang = t * p.orbitSpd;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const nx = x * ca - z * sa;
+      const nz = x * sa + z * ca;
+      x = nx; z = nz;
+      y += Math.sin(t * p.floatSpd + p.phase) * p.floatAmp;
+    }
+    const pr = project(x, y, z);
+    const twinkle = 0.65 + 0.35 * Math.sin(t * 0.0045 + p.phase);
+    const item = { p, pr, twinkle };
+    if (pr.z > 0) backList.push(item);
+    else frontList.push(item);
+  }
+  backList.sort((a, b) => b.pr.z - a.pr.z);
+  frontList.sort((a, b) => b.pr.z - a.pr.z);
+
+  function paintItem({ p, pr, twinkle }) {
+    const r = p.size * pr.s;
+    const depthFade = Math.max(0.28, Math.min(1, 1 - pr.z / 320));
+    const alpha = depthFade * twinkle;
+    if (p.kind === "bokeh") {
+      drawBokeh(pr.sx, pr.sy, r * 1.4, p.col, alpha * 0.85);
+    } else if (p.kind === "star") {
+      drawStar(pr.sx, pr.sy, r * 1.45, p.phase + t * 0.0006, p.col, alpha, p.glow);
+    } else {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.col;
+      if (p.glow) { ctx.shadowColor = p.col; ctx.shadowBlur = r * 2.5; }
+      ctx.beginPath(); ctx.arc(pr.sx, pr.sy, r * 0.72, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // 4. 背面粒子 -> 白色瓷盘 -> 3D 银河蛋糕 -> 中心蜡烛 -> 正面粒子 -> 玻璃球外壳
+  for (const it of backList) {
+    if (it.p.layer !== "plate") paintItem(it);
+  }
+  drawPlate();
+  for (const it of backList) {
+    if (it.p.layer === "plate") paintItem(it);
+  }
+  drawCakeBody(t);
+  drawCandle(t);
+  for (const it of frontList) paintItem(it);
+
+  // 5. 火星与吹灭蜡烛后的烟雾
+  for (let i = embers.length - 1; i >= 0; i--) {
+    const em = embers[i];
+    em.x += em.vx; em.y += em.vy; em.life -= 0.02;
+    if (em.life <= 0) { embers.splice(i, 1); continue; }
+    const pr = project(em.x, em.y, em.z);
+    ctx.globalAlpha = em.life;
+    ctx.fillStyle = "#ffe58f";
+    ctx.beginPath(); ctx.arc(pr.sx, pr.sy, em.r * pr.s, 0, Math.PI * 2); ctx.fill();
+  }
+  for (let i = smokes.length - 1; i >= 0; i--) {
+    const sm = smokes[i];
+    sm.x += sm.vx; sm.y += sm.vy; sm.r += 0.25; sm.life -= 0.012;
+    if (sm.life <= 0) { smokes.splice(i, 1); continue; }
+    const pr = project(sm.x, sm.y, sm.z);
+    ctx.save();
+    ctx.globalAlpha = sm.life * 0.42;
+    const sg = ctx.createRadialGradient(pr.sx, pr.sy, 0, pr.sx, pr.sy, sm.r * pr.s * 2);
+    sg.addColorStop(0, "rgba(235, 240, 255, 0.85)");
+    sg.addColorStop(1, "rgba(235, 240, 255, 0)");
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.arc(pr.sx, pr.sy, sm.r * pr.s * 2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // 6. 3D 烟花粒子
+  for (let i = fireworks.length - 1; i >= 0; i--) {
+    const f = fireworks[i];
+    f.x += f.vx; f.y += f.vy; f.z += f.vz;
+    f.vy += 0.055; f.vx *= 0.985; f.vz *= 0.985;
+    f.life -= f.decay;
+    if (f.life <= 0) { fireworks.splice(i, 1); continue; }
+    const pr = project(f.x, f.y, f.z);
+    if (f.kind === "star") {
+      drawStar(pr.sx, pr.sy, f.size * pr.s * 1.4, f.life * 5, f.col, f.life, true);
+    } else {
+      ctx.save();
+      ctx.globalAlpha = f.life;
+      ctx.fillStyle = f.col;
+      ctx.shadowColor = f.col; ctx.shadowBlur = 8;
+      ctx.beginPath(); ctx.arc(pr.sx, pr.sy, f.size * pr.s * 0.7, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // 7. 水晶球正面高光玻璃罩
+  drawCrystalDome(true);
+
+  requestAnimationFrame(render);
+}
+requestAnimationFrame(render);
+</script>
+</body>
+</html>
